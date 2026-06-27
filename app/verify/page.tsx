@@ -232,11 +232,14 @@ function VerifyPageInner() {
               <p className="text-xs text-slate-400 font-mono mb-6">
                 Serial: <span className="font-bold text-slate-600">{serial}</span>
               </p>
-              {state.scansCount > 1 && (
+              {/* {state.scansCount > 1 && (
                 <div className="rounded-xl bg-amber-50 border border-amber-100 px-4 py-3 mb-6 text-sm text-amber-700">
                   <strong>Note:</strong> This serial has been scanned {state.scansCount} time{state.scansCount !== 1 ? "s" : ""}. If you did not scan it before, please contact us.
                 </div>
-              )}
+              )} */}
+              <div className="rounded-xl bg-green-50 border border-green-100 px-4 py-3 mb-6 text-sm text-green-700">
+                <strong>Thanks for your trust. We look forward to your next order!</strong>
+              </div>
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={handleReset}

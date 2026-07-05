@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  let body: { count?: number; label?: string };
+  let body: { count?: number; label?: string; productId?: string };
   try {
     body = await request.json();
   } catch {
@@ -30,6 +30,18 @@ export async function POST(request: NextRequest) {
 
   const label = (body.label ?? "").slice(0, 128);
 
+  // Product is optional, but if provided it must exist.
+  const productId = (body.productId ?? "").trim() || null;
+  if (productId) {
+    const found = await query<{ id: string }>(
+      `SELECT id FROM products WHERE id = $1`,
+      [productId]
+    );
+    if (found.length === 0) {
+      return NextResponse.json({ error: "Selected product not found." }, { status: 400 });
+    }
+  }
+
   try {
     const client = await getClient();
     try {
@@ -37,8 +49,8 @@ export async function POST(request: NextRequest) {
 
       // Create batch record
       const batchRows = await client.query<{ id: string }>(
-        `INSERT INTO batches (label, count) VALUES ($1, $2) RETURNING id`,
-        [label || null, count]
+        `INSERT INTO batches (label, count, product_id) VALUES ($1, $2, $3) RETURNING id`,
+        [label || null, count, productId]
       );
       const batchId = batchRows.rows[0].id;
 
@@ -66,13 +78,14 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Bulk insert
+      // Bulk insert — denormalize product_id onto each serial so /api/verify
+      // can resolve the product in a single query.
       const placeholders = serials
-        .map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`)
+        .map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`)
         .join(", ");
-      const values = serials.flatMap((s) => [s, batchId]);
+      const values = serials.flatMap((s) => [s, batchId, productId]);
       await client.query(
-        `INSERT INTO serials (serial, batch_id) VALUES ${placeholders}`,
+        `INSERT INTO serials (serial, batch_id, product_id) VALUES ${placeholders}`,
         values
       );
 

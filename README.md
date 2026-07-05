@@ -244,3 +244,35 @@ Returns a ZIP file containing all QR code PNGs.
 | `ADMIN_PASSWORD_HASH` | ✅ | bcrypt hash of admin password |
 | `NEXT_PUBLIC_BASE_URL` | ✅ | Base URL for QR code links |
 | `RATE_LIMIT_MAX` | ❌ | Max verify attempts/IP/15min (default: 10) |
+| `BLOB_READ_WRITE_TOKEN` | ✅ | Vercel Blob token for product image uploads (see below) |
+
+---
+
+## Products & Vercel Blob
+
+Admins can manage products (name, description, image) at `/admin/products`. When
+generating a batch of QR codes, the admin picks the product the codes are for;
+when a customer scans one of those codes, the verification screen shows that
+product's image. Codes generated **before** a product was assigned (or whose
+product was later deleted) simply show the original image-less "Verified Genuine"
+screen — old behavior is unchanged.
+
+Product images are stored in **Vercel Blob** (CDN-served, keeps them off the
+database):
+
+1. In Vercel → **Storage → Create → Blob**. This adds `BLOB_READ_WRITE_TOKEN`
+   to the project automatically for Production/Preview/Development.
+2. For local dev, copy that token from the store's **`.env.local`** tab into your
+   own `.env.local`.
+
+### Database migration
+
+If you already ran `schema.sql` on an existing database, apply the incremental
+migration to add the products feature:
+
+```bash
+psql "postgresql://..." -f migrations/001_products.sql
+```
+
+Fresh databases can just run the updated `schema.sql` — it already includes
+these tables and columns.

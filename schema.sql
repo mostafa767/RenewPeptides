@@ -4,11 +4,27 @@
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+-- ─── Products ─────────────────────────────────────────────────────────────────
+-- Products a QR-code batch can be generated for. image_url points at the
+-- uploaded image (Vercel Blob). All columns except name are optional so a
+-- product can exist before an image is attached.
+CREATE TABLE IF NOT EXISTS products (
+  id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        VARCHAR(200) NOT NULL,
+  description TEXT,
+  image_url   TEXT,
+  created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_products_created_at ON products (created_at DESC);
+
 -- ─── Serials ──────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS serials (
   id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   serial         VARCHAR(32) UNIQUE NOT NULL,
   batch_id       UUID,
+  product_id     UUID        REFERENCES products(id) ON DELETE SET NULL,
   is_used        BOOLEAN     NOT NULL DEFAULT FALSE,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   scans_count    INTEGER     NOT NULL DEFAULT 0,
@@ -17,6 +33,7 @@ CREATE TABLE IF NOT EXISTS serials (
 
 CREATE INDEX IF NOT EXISTS idx_serials_serial      ON serials (serial);
 CREATE INDEX IF NOT EXISTS idx_serials_batch_id    ON serials (batch_id);
+CREATE INDEX IF NOT EXISTS idx_serials_product_id  ON serials (product_id);
 CREATE INDEX IF NOT EXISTS idx_serials_created_at  ON serials (created_at DESC);
 
 -- ─── Batches ──────────────────────────────────────────────────────────────────
@@ -25,8 +42,11 @@ CREATE TABLE IF NOT EXISTS batches (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   label       VARCHAR(128),
   count       INTEGER     NOT NULL,
+  product_id  UUID        REFERENCES products(id) ON DELETE SET NULL,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_batches_product_id ON batches (product_id);
 
 -- ─── Rate Limit ───────────────────────────────────────────────────────────────
 -- Simple DB-backed rate limiter for the public /api/verify endpoint

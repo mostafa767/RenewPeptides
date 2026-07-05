@@ -2,12 +2,19 @@
 
 import { useEffect, useRef, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import Image from "next/image";
 import Link from "next/link";
+
+type Product = {
+  name: string | null;
+  description: string | null;
+  imageUrl: string;
+};
 
 type VerifyState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "valid"; message: string; scansCount: number }
+  | { status: "valid"; message: string; scansCount: number; product: Product | null }
   | { status: "invalid"; message: string }
   | { status: "error"; message: string };
 
@@ -18,6 +25,27 @@ function formatSerial(raw: string): string {
     parts.push(clean.slice(i, i + 4));
   }
   return parts.join("-");
+}
+
+function ProductPreview({ product }: { product: Product }) {
+  return (
+    <div className="flex justify-center">
+      <div className="relative flex h-56 w-56 items-center justify-center">
+        <div className="absolute inset-8 rounded-full bg-brand-accent/10 blur-3xl" />
+
+        <div className="relative h-52 w-52 shrink-0">
+          <Image
+            src={product.imageUrl}
+            alt={product.name ?? "RenewPeptides product"}
+            fill
+            sizes="208px"
+            className="object-contain drop-shadow-2xl scale-110"
+            priority
+          />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function VerifyPageInner() {
@@ -85,6 +113,7 @@ function VerifyPageInner() {
             status: "valid",
             message: data.message ?? "This is an authentic RenewPeptides product.",
             scansCount: data.scansCount ?? 1,
+            product: data.product ?? null,
           });
         } else {
           setState({
@@ -214,32 +243,35 @@ function VerifyPageInner() {
           {/* Valid result */}
           {state.status === "valid" && (
             <div className="text-center animate-fade-in-up">
-              <div className="inline-flex items-center justify-center h-24 w-24 rounded-full bg-green-50 border-4 border-green-100 mx-auto mb-5 animate-pulse-ring">
-                <svg viewBox="0 0 24 24" fill="none" className="h-12 w-12 text-green-500" aria-hidden="true">
-                  <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700 mb-3">
-                <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+              {state.product && <ProductPreview product={state.product} />}
+              <div className="mx-auto mt-4 mb-4 inline-flex items-center gap-2 rounded-full bg-green-100 px-4 py-2 text-sm font-bold text-green-700 animate-pulse">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-green-500 text-white">
+                  ✓
+                </span>
                 Authentic Product
               </div>
-              <h2 className="text-2xl font-extrabold text-slate-900 mb-2">
+
+              <h2 className="text-3xl font-extrabold text-slate-900 mb-3">
                 Verified Genuine
               </h2>
-              <p className="text-slate-600 text-sm leading-relaxed mb-2">
+
+              <p className="mx-auto max-w-sm text-slate-600 text-sm leading-relaxed mb-3">
                 {state.message}
               </p>
+
               <p className="text-xs text-slate-400 font-mono mb-6">
                 Serial: <span className="font-bold text-slate-600">{serial}</span>
               </p>
-              {/* {state.scansCount > 1 && (
+
+              {/* {state.scansCount > 1 && ( 
                 <div className="rounded-xl bg-amber-50 border border-amber-100 px-4 py-3 mb-6 text-sm text-amber-700">
                   <strong>Note:</strong> This serial has been scanned {state.scansCount} time{state.scansCount !== 1 ? "s" : ""}. If you did not scan it before, please contact us.
                 </div>
               )} */}
-              <div className="rounded-xl bg-green-50 border border-green-100 px-4 py-3 mb-6 text-sm text-green-700">
+              <div className="rounded-2xl bg-green-50 border border-green-100 px-5 py-4 mb-6 text-sm text-green-700">
                 <strong>Thanks for your trust. We look forward to your next order!</strong>
               </div>
+
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={handleReset}
@@ -247,6 +279,7 @@ function VerifyPageInner() {
                 >
                   Verify Another
                 </button>
+
                 <Link
                   href="/contact"
                   className="flex-1 rounded-2xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-200 transition-colors text-center"

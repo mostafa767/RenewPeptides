@@ -1,9 +1,16 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+interface Product {
+  id: string;
+  name: string;
+  description: string | null;
+  image_url: string | null;
+}
 
 interface Stats {
   totalSerials: number;
@@ -80,6 +87,100 @@ function StatCard({
   );
 }
 
+// Searchable product dropdown for the generate form.
+function ProductSelect({
+  products,
+  value,
+  onChange,
+}: {
+  products: Product[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  const selected = products.find((p) => p.id === value) ?? null;
+
+  const filtered = search.trim()
+    ? products.filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase()))
+    : products;
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="input-field text-sm flex items-center justify-between gap-2 text-left"
+      >
+        <span className={selected ? "text-navy-900 truncate" : "text-slate-400"}>
+          {selected ? selected.name : "Select a product…"}
+        </span>
+        <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-slate-400 shrink-0" aria-hidden="true">
+          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute z-30 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+          <div className="p-2 border-b border-slate-100">
+            <input
+              autoFocus
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search products…"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-accent focus:outline-none focus:ring-2 focus:ring-brand-accent/15"
+            />
+          </div>
+          <div className="max-h-56 overflow-y-auto">
+            {products.length === 0 ? (
+              <p className="px-4 py-6 text-center text-xs text-slate-400">
+                No products yet.{" "}
+                <a href="/admin/products" className="text-brand-accent hover:underline font-medium">
+                  Add one first.
+                </a>
+              </p>
+            ) : filtered.length === 0 ? (
+              <p className="px-4 py-6 text-center text-xs text-slate-400">No matches.</p>
+            ) : (
+              filtered.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => { onChange(p.id); setOpen(false); setSearch(""); }}
+                  className={`w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-50 transition-colors ${
+                    p.id === value ? "bg-brand-accent/5" : ""
+                  }`}
+                >
+                  <span className="relative h-9 w-9 shrink-0 rounded-lg bg-slate-100 overflow-hidden flex items-center justify-center">
+                    {p.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={p.image_url} alt="" className="h-full w-full object-contain p-1" />
+                    ) : (
+                      <span className="text-[9px] text-slate-300">—</span>
+                    )}
+                  </span>
+                  <span className="text-sm text-navy-900 truncate">{p.name}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
@@ -96,10 +197,14 @@ export default function AdminDashboard() {
   const [search, setSearch] = useState("");
   const [selectedBatch, setSelectedBatch] = useState<string>("");
 
+  // Products (for the generate form's selector)
+  const [products, setProducts] = useState<Product[]>([]);
+
   // Generate modal
   const [showGenerate, setShowGenerate] = useState(false);
   const [genCount, setGenCount] = useState(100);
   const [genLabel, setGenLabel] = useState("");
+  const [genProductId, setGenProductId] = useState("");
   const [genLoading, setGenLoading] = useState(false);
   const [genResult, setGenResult] = useState<{ batchId: string; count: number } | null>(null);
   const [genError, setGenError] = useState("");
@@ -145,8 +250,20 @@ export default function AdminDashboard() {
     [search, selectedBatch, router]
   );
 
+  const fetchProducts = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/products");
+      if (res.status === 401) { router.push("/admin/login"); return; }
+      const data = await res.json();
+      setProducts(data.data ?? []);
+    } catch {
+      // silent
+    }
+  }, [router]);
+
   useEffect(() => { fetchStats(); }, [fetchStats]);
   useEffect(() => { fetchSerials(1); }, [fetchSerials]);
+  useEffect(() => { fetchProducts(); }, [fetchProducts]);
 
   // ── Actions ──
 
@@ -157,6 +274,12 @@ export default function AdminDashboard() {
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
+
+    if (!genProductId) {
+      setGenError("Please select a product before generating codes.");
+      return;
+    }
+
     setGenLoading(true);
     setGenError("");
     setGenResult(null);
@@ -165,7 +288,7 @@ export default function AdminDashboard() {
       const res = await fetch("/api/generate-serials", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ count: genCount, label: genLabel }),
+        body: JSON.stringify({ count: genCount, label: genLabel, productId: genProductId }),
       });
       const data = await res.json();
       if (!res.ok) { setGenError(data.error ?? "Generation failed."); return; }
@@ -243,6 +366,9 @@ export default function AdminDashboard() {
             <span className="hidden sm:block text-slate-400 text-xs">/ Dashboard</span>
           </div>
           <div className="flex items-center gap-3">
+            <a href="/admin/products" className="text-xs text-slate-400 hover:text-white transition-colors">
+              Products
+            </a>
             <a href="/" target="_blank" rel="noopener" className="text-xs text-slate-400 hover:text-white transition-colors hidden sm:block">
               View Site ↗
             </a>
@@ -299,6 +425,16 @@ export default function AdminDashboard() {
 
           {showGenerate && (
             <form onSubmit={handleGenerate} className="mt-4 p-5 rounded-2xl bg-slate-50 border border-slate-100 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                  Product <span className="text-red-400">*</span>
+                </label>
+                <ProductSelect products={products} value={genProductId} onChange={setGenProductId} />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  The product image customers see when they scan these codes.{" "}
+                  <a href="/admin/products" className="text-brand-accent hover:underline">Manage products</a>
+                </p>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1.5">
@@ -378,8 +514,8 @@ export default function AdminDashboard() {
               <div className="flex gap-3">
                 <button
                   type="submit"
-                  disabled={genLoading}
-                  className="rounded-xl bg-brand-accent px-5 py-2.5 text-sm font-bold text-white hover:bg-sky-700 transition-colors disabled:opacity-60 flex items-center gap-2"
+                  disabled={genLoading || !genProductId}
+                  className="rounded-xl bg-brand-accent px-5 py-2.5 text-sm font-bold text-white hover:bg-sky-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {genLoading ? (
                     <>

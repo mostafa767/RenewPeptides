@@ -57,18 +57,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check DB
+    // Increment the scan counter and resolve the linked product (if any) in a
+    // single round-trip. Serials created before the product feature — or whose
+    // product was deleted — have product_id = NULL and return no product.
     const rows = await query<{
       id: string;
       serial: string;
       scans_count: number;
+      product_id: string | null;
+      product_name: string | null;
+      product_description: string | null;
+      product_image_url: string | null;
     }>(
-      `UPDATE serials
-          SET scans_count     = scans_count + 1,
-              last_scanned_at = NOW(),
-              is_used         = TRUE
-        WHERE serial = $1
-       RETURNING id, serial, scans_count`,
+      `WITH updated AS (
+         UPDATE serials
+            SET scans_count     = scans_count + 1,
+                last_scanned_at = NOW(),
+                is_used         = TRUE
+          WHERE serial = $1
+        RETURNING id, serial, scans_count, product_id
+       )
+       SELECT u.id, u.serial, u.scans_count,
+              p.id          AS product_id,
+              p.name        AS product_name,
+              p.description  AS product_description,
+              p.image_url    AS product_image_url
+         FROM updated u
+         LEFT JOIN products p ON p.id = u.product_id`,
       [serial]
     );
 
@@ -86,11 +101,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const row = rows[0];
+    const product =
+      row.product_id && row.product_image_url
+        ? {
+            name: row.product_name,
+            description: row.product_description,
+            imageUrl: row.product_image_url,
+          }
+        : null;
+
     return NextResponse.json(
       {
         valid: true,
         message: "This is an authentic RenewPeptides product.",
-        scansCount: rows[0].scans_count,
+        scansCount: row.scans_count,
+        product,
       },
       {
         status: 200,
